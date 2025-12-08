@@ -4,12 +4,11 @@ import json
 import glob
 import re
 
-# ========== 关键修复：添加项目根目录到Python搜索路径 ==========
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(ROOT_DIR)
 
 # ========== 正确导入 ==========
-from src.experiment import evaluate_passk
+from src.evaluate import evaluate_passk, self_consistency_passk
 from config import NUM_SAMPLES
 
 # ========== 配置项 ==========
@@ -23,8 +22,8 @@ def batch_evaluate_jsonl():
         print(f"[ERROR] Target directory {TARGET_DIR} does not exist!")
         return
     
-    # 2. Scan all jsonl files
-    jsonl_files = glob.glob(os.path.join(TARGET_DIR, "**/*.jsonl"), recursive=True)
+    # 2. Scan all raw jsonl files
+    jsonl_files = glob.glob(os.path.join(TARGET_DIR, "**/raw*.jsonl"), recursive=True)
     if not jsonl_files:
         print(f"[WARNING] No .jsonl files found in {TARGET_DIR}!")
         return
@@ -56,7 +55,6 @@ def batch_evaluate_jsonl():
             k_match = re.search(r"pass@(\d+)", file_name)
             pass_k = int(k_match.group(1)) if k_match else NUM_SAMPLES
             
-            # 核心修复：移除不存在的 use_self_consistency/use_verifier 参数
             eval_result = evaluate_passk(
                 jsonl_path=file_path,
                 pass_k=pass_k

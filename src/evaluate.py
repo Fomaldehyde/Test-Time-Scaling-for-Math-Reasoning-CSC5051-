@@ -1,324 +1,88 @@
-import re
-import sympy
-from typing import Optional
-from pylatexenc import latex2text
-from sympy.parsing import sympy_parser
+import json
+from typing import Counter
+from config import NUM_SAMPLES
+from src.grade import grade_answer, extract_answer
+
+def evaluate_passk(jsonl_path, pass_k=NUM_SAMPLES):
+    """兼容 refine 格式：优先 round2，否则回退 model_raw_output"""
+    total, pass_ok = 0, 0
+    all_lat, all_pt, all_ct = [], [], []
+
+    with open(jsonl_path, encoding="utf-8") as f:
+        for line in f:
+            rec = json.loads(line)
+            total += 1
+            ref = rec["reference_answer"]
+
+            # 投票：优先用 round2，没有就回退旧字段
+            if any(grade_answer(extract_answer(
+                    o.get("round2") or o["model_raw_output"]), ref)
+                    for o in rec["model_outputs"][:pass_k]):
+                pass_ok += 1
+
+            all_lat.append(rec["total_latency"])
+            all_pt.append(rec["total_prompt_tokens"])
+            all_ct.append(rec["total_completion_tokens"])
+
+    return {
+        "total": total,
+        "pass@k": round(pass_ok / total, 4),
+        "latency_avg": round(sum(all_lat) / len(all_lat), 2),
+        "latency_total": round(sum(all_lat), 2),
+        "prompt_tokens_total": sum(all_pt),
+        "completion_tokens_total": sum(all_ct)
+    }
 
 
-def normalize_answer(answer: Optional[str]) -> Optional[str]:
-    if answer is None:
-        return None
-    answer = answer.strip()
-    try:
-        m = re.search(r"^\\\\text\{(?P<text>.+?)\}$", answer)
-        if m is not None:
-            answer = m.group("text").strip()
-        return _strip_string(answer)
-    except Exception:
-        return answer
+def self_consistency_passk(jsonl_path, pass_k=NUM_SAMPLES):
+    """
+    自一致性的评估
+    核心逻辑：
+    1. 对每道题的k条路径，提取答案（优先round2）并做多数投票
+    2. 仅用投票选出的答案和标准答案比对
+    3. 返回格式和原evaluate_passk完全一致
+    """
+    total, sc_correct = 0, 0  # total=总题数，sc_correct=自一致性投票后正确数
+    all_lat, all_pt, all_ct = [], [], []  # 资源消耗统计
 
-def _fix_fracs(string):
-    substrs = string.split("\\frac")
-    new_str = substrs[0]
-    if len(substrs) > 1:
-        substrs = substrs[1:]
-        for substr in substrs:
-            new_str += "\\frac"
-            if substr[0] == "{":
-                new_str += substr
+    with open(jsonl_path, encoding="utf-8") as f:
+        for line in f:
+            rec = json.loads(line)
+            total += 1
+            ref = rec["reference_answer"]
+            outputs = rec["model_outputs"][:pass_k]  # 取前k条路径
+
+            # ========== 核心：提取k条路径的答案 + 多数投票 ==========
+            # 1. 提取每条路径的答案（优先round2，和原逻辑一致）
+            path_answers = []
+            for o in outputs:
+                raw_ans = o.get("round2") or o["model_raw_output"]  # 兼容round1/round2
+                norm_ans = extract_answer(raw_ans)
+                path_answers.append(norm_ans)
+            
+            # 2. 多数投票（盲投票：仅统计答案出现次数，无标准答案参与）
+            if path_answers:
+                vote_counter = Counter(path_answers)
+                # 选出现次数最多的答案（平局时选第一条）
+                voted_ans = vote_counter.most_common(1)[0][0]
             else:
-                try:
-                    assert len(substr) >= 2
-                except AssertionError:
-                    return string
-                a = substr[0]
-                b = substr[1]
-                if b != "{":
-                    if len(substr) > 2:
-                        post_substr = substr[2:]
-                        new_str += "{" + a + "}{" + b + "}" + post_substr
-                    else:
-                        new_str += "{" + a + "}{" + b + "}"
-                else:
-                    if len(substr) > 2:
-                        post_substr = substr[2:]
-                        new_str += "{" + a + "}" + b + post_substr
-                    else:
-                        new_str += "{" + a + "}" + b
-    string = new_str
-    return string
+                voted_ans = ""
 
-def _fix_a_slash_b(string):
-    if len(string.split("/")) != 2:
-        return string
-    a = string.split("/")[0]
-    b = string.split("/")[1]
-    try:
-        a = int(a)
-        b = int(b)
-        assert string == "{}/{}".format(a, b)
-        new_string = "\\frac{" + str(a) + "}{" + str(b) + "}"
-        return new_string
-    except (ValueError, AssertionError):
-        return string
+            # ========== 判断投票答案是否正确 ==========
+            if grade_answer(voted_ans, ref):
+                sc_correct += 1
 
-def _remove_right_units(string):
-    if "\\text{ " in string:
-        splits = string.split("\\text{ ")
-        assert len(splits) == 2
-        return splits[0]
-    else:
-        return string
+            # ========== 资源消耗统计（和原逻辑一致） ==========
+            all_lat.append(rec["total_latency"])
+            all_pt.append(rec["total_prompt_tokens"])
+            all_ct.append(rec["total_completion_tokens"])
 
-def _fix_sqrt(string):
-    if "\\sqrt" not in string:
-        return string
-    splits = string.split("\\sqrt")
-    new_string = splits[0]
-    for split in splits[1:]:
-        if split[0] != "{":
-            a = split[0]
-            new_substr = "\\sqrt{" + a + "}" + split[1:]
-        else:
-            new_substr = "\\sqrt" + split
-        new_string += new_substr
-    return string
-
-def _strip_string(string):
-    string = string.replace("\n", "")
-    string = string.replace("\\!", "")
-    string = string.replace("\\\\", "\\")
-    string = string.replace("tfrac", "frac")
-    string = string.replace("dfrac", "frac")
-    string = string.replace("\\left", "")
-    string = string.replace("\\right", "")
-    string = string.replace("^{\\circ}", "")
-    string = string.replace("^\\circ", "")
-    string = string.replace("\\$", "")
-    string = _remove_right_units(string)
-    string = string.replace("\\%", "")
-    string = string.replace(r"\%", "")
-    string = string.replace(" .", " 0.")
-    string = string.replace("{.", "{0.")
-    if len(string) == 0:
-        return string
-    if string[0] == ".":
-        string = "0" + string
-    if len(string.split("=")) == 2 and len(string.split("=")[0]) <= 2:
-        string = string.split("=")[1]
-    string = _fix_sqrt(string)
-    string = string.replace(" ", "")
-    string = _fix_fracs(string)
-    if string == "0.5":
-        string = "\\frac{1}{2}"
-    string = _fix_a_slash_b(string)
-    return string
-
-# ==================== 答案正确性评估 ====================
-BAD_SUBSTRINGS = [r"^{", r"^("]
-BAD_REGEXES = [r"\^[0-9]+\^", r"\^[0-9][0-9]+"]
-TUPLE_CHARS = "()[]"
-
-def _sympy_parse(expr: str):
-    py_expr = expr.replace("^", "**")
-    return sympy_parser.parse_expr(
-        py_expr,
-        transformations=(
-            sympy_parser.standard_transformations
-            + (sympy_parser.implicit_multiplication_application,)
-        ),
-    )
-
-def _parse_latex(expr: str) -> str:
-    expr = expr.replace("\\tfrac", "\\frac")
-    expr = expr.replace("\\dfrac", "\\frac")
-    expr = expr.replace("\\frac", " \\frac")
-    expr = latex2text.LatexNodes2Text().latex_to_text(expr)
-    expr = expr.replace("√", "sqrt")
-    expr = expr.replace("π", "pi")
-    expr = expr.replace("∞", "inf")
-    expr = expr.replace("∪", "U")
-    expr = expr.replace("·", "*")
-    expr = expr.replace("×", "*")
-    return expr.strip()
-
-def _is_float(num: str) -> bool:
-    try:
-        float(num)
-        return True
-    except ValueError:
-        return False
-
-def _is_int(x: float) -> bool:
-    try:
-        return abs(x - int(round(x))) <= 1e-7
-    except Exception:
-        return False
-
-def _is_frac(expr: str) -> bool:
-    return bool(re.search(r"^-?[0-9]+.?/0*[1-9][0-9]*.?$", expr))
-
-def _str_is_int(x: str) -> bool:
-    try:
-        x = _strip_properly_formatted_commas(x)
-        x = float(x)
-        return abs(x - int(round(x))) <= 1e-7
-    except Exception:
-        return False
-
-def _str_to_int(x: str) -> int:
-    x = x.replace(",", "")
-    x = float(x)
-    return int(x)
-
-def _inject_implicit_mixed_number(step: str):
-    p1 = re.compile(r"([0-9]) +([0-9])")
-    step = p1.sub("\\1+\\2", step)
-    return step
-
-def _strip_properly_formatted_commas(expr: str):
-    p1 = re.compile(r"(\d)(,)(\d\d\d)($|\D)")
-    while True:
-        next_expr = p1.sub("\\1\\3\\4", expr)
-        if next_expr == expr:
-            break
-        expr = next_expr
-    return next_expr
-
-def _normalize(expr: str) -> str:
-    if expr is None:
-        return None
-    m = re.search(r"^\\text\{(?P<text>.+?)\}$", expr)
-    if m is not None:
-        expr = m.group("text")
-    expr = expr.replace(r"\%", "%")
-    expr = expr.replace(r"\$", "$")
-    expr = expr.replace("$", "")
-    expr = expr.replace("%", "")
-    expr = expr.replace(" or ", " , ")
-    expr = expr.replace(" and ", " , ")
-    expr = expr.replace("million", "*10^6")
-    expr = expr.replace("billion", "*10^9")
-    expr = expr.replace("trillion", "*10^12")
-    units = [
-        "degree", "cm", "centimeter", "meter", "mile", "second", "minute",
-        "hour", "day", "week", "month", "year", "foot", "feet", "inch", "yard"
-    ]
-    for unit in units:
-        expr = re.sub(rf"{unit}(es)?(s)? *(\^[0-9]+)?", "", expr)
-    expr = re.sub(rf"\^ *\\\\circ", "", expr)
-    if len(expr) > 0 and expr[0] == "{" and expr[-1] == "}":
-        expr = expr[1:-1]
-    expr = re.sub(",\\\\! *", "", expr)
-    if _is_float(expr) and _is_int(float(expr)):
-        expr = str(int(round(float(expr))))
-    if "\\" in expr:
-        try:
-            expr = _parse_latex(expr)
-        except Exception:
-            pass
-    expr = re.sub("- *", "-", expr)
-    expr = _inject_implicit_mixed_number(expr)
-    expr = expr.replace(" ", "")
-    expr = expr.replace("{", "")
-    expr = expr.replace("}", "")
-    expr = expr.lower()
-    if _str_is_int(expr):
-        expr = str(_str_to_int(expr))
-    return expr
-
-def count_unknown_letters_in_expr(expr: str):
-    expr = expr.replace("sqrt", "").replace("frac", "")
-    letters_in_expr = set([x for x in expr if x.isalpha()])
-    return len(letters_in_expr)
-
-def should_allow_eval(expr: str):
-    if count_unknown_letters_in_expr(expr) > 2:
-        return False
-    for bad_string in BAD_SUBSTRINGS:
-        if bad_string in expr:
-            return False
-    for bad_regex in BAD_REGEXES:
-        if re.search(bad_regex, expr) is not None:
-            return False
-    return True
-
-def are_equal_under_sympy(ground_truth_normalized: str, given_normalized: str):
-    are_equal = False
-    try:
-        expr = f"({ground_truth_normalized})-({given_normalized})"
-        if should_allow_eval(expr):
-            sympy_diff = _sympy_parse(expr)
-            simplified = sympy.simplify(sympy_diff)
-            if simplified == 0:
-                are_equal = True
-    except Exception:
-        pass
-    return are_equal
-
-def split_tuple(expr: str):
-    expr = _strip_properly_formatted_commas(expr)
-    if len(expr) == 0:
-        return []
-    if (
-        len(expr) > 2
-        and expr[0] in TUPLE_CHARS
-        and expr[-1] in TUPLE_CHARS
-        and all([ch not in expr[1:-1] for ch in TUPLE_CHARS])
-    ):
-        elems = [elem.strip() for elem in expr[1:-1].split(",")]
-    else:
-        elems = [expr]
-    return elems
-
-def grade_answer(given_answer: str, ground_truth: str) -> bool:
-    if given_answer is None:
-        return False
-    ground_truth_normalized_mathd = normalize_answer(ground_truth)
-    given_answer_normalized_mathd = normalize_answer(given_answer)
-    if ground_truth_normalized_mathd == given_answer_normalized_mathd:
-        return True
-    ground_truth_normalized = _normalize(ground_truth)
-    given_normalized = _normalize(given_answer)
-    if ground_truth_normalized is None or len(given_normalized) == 0:
-        return False
-    if ground_truth_normalized == given_normalized:
-        return True
-    ground_truth_elems = split_tuple(ground_truth_normalized)
-    given_elems = split_tuple(given_normalized)
-    if len(ground_truth_elems) > 1 and (
-        ground_truth_normalized[0] != given_normalized[0]
-        or ground_truth_normalized[-1] != given_normalized[-1]
-    ):
-        is_correct = False
-    elif len(ground_truth_elems) != len(given_elems):
-        is_correct = False
-    else:
-        is_correct = True
-        for gt_elem, given_elem in zip(ground_truth_elems, given_elems):
-            if _is_frac(gt_elem) and _is_frac(given_elem):
-                is_correct = gt_elem == given_elem
-            elif _str_is_int(gt_elem) != _str_is_int(given_elem):
-                is_correct = False
-            else:
-                is_correct = are_equal_under_sympy(gt_elem, given_elem)
-            if not is_correct:
-                break
-    return is_correct
-
-def extract_answer(text: str) -> str:
-    if text is None:
-        return ""
-    text = str(text).strip()
-    # 抽取\boxed{}中的答案
-    boxed = re.findall(r'\\boxed\s*\{((?:[^{}]|(?:\{[^{}]*\}))*)\}', text, re.S)
-    if boxed:
-        raw = boxed[-1].strip()
-    else:
-        # 兜底：Answer: / 最后一行
-        m = re.search(r'(?:Answer|答案)[:：]\s*(.+?)(?:\n|$)', text, re.I)
-        raw = m.group(1).strip() if m else text.splitlines()[-1].strip()
-    # 归一化
-    raw = raw.strip().rstrip('.。,，')
-    normalized = normalize_answer(raw)
-    return normalized if normalized else raw
+    # 返回格式和原evaluate_passk完全一致
+    return {
+        "total": total,
+        "pass@k": round(sc_correct / total, 4),  # 这里实际是自一致性准确率
+        "latency_avg": round(sum(all_lat) / len(all_lat), 2),
+        "latency_total": round(sum(all_lat), 2),
+        "prompt_tokens_total": sum(all_pt),
+        "completion_tokens_total": sum(all_ct)
+    }

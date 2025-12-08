@@ -1,0 +1,10 @@
+{
+  "base": {
+    "total": 50,
+    "pass@k": 0.68,
+    "latency_avg": 41.6,
+    "latency_total": 2079.84,
+    "prompt_tokens_total": 17574,
+    "completion_tokens_total": 54680
+  }
+}

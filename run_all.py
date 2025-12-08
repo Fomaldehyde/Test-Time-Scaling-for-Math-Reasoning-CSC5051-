@@ -6,7 +6,8 @@ from config import (
 )
 from data.data_loader import load_math_dataset, sample_questions
 from src.prompts import get_prompt
-from src.experiment import generate_and_save_answers, evaluate_passk
+from src.generate import generate_and_save_answers
+from src.evaluate import evaluate_passk, self_consistency_passk
 
 def main():
     # Step 1: 加载测试数据集
@@ -16,12 +17,12 @@ def main():
     
     # Step 2: 定义所有实验配置
     experiments = [
-        # {
-        #     "method_name": "base_empty_prompt",
-        #     "prompt_type": "base_empty",
-        #     "temperature": 0.3,
-        #     "max_new_tokens": MAX_NEW_TOKENS_BASE
-        # },
+        {
+            "method_name": "0_shot",
+            "prompt_type": "0_shot",
+            "temperature": TEMPERATURE_BASE,
+            "max_new_tokens": MAX_NEW_TOKENS_BASE
+        },
         # {
         #     "method_name": "cot_detailed",
         #     "prompt_type": "cot_detailed",
@@ -52,13 +53,13 @@ def main():
         #     "temperature": TEMPERATURE_COT,
         #     "max_new_tokens": MAX_NEW_TOKENS_COT
         # },
-        {
-        "method_name": "cot_detailed_with_reflection",
-        "prompt_type": "cot_detailed",
-        "temperature": TEMPERATURE_COT,
-        "max_new_tokens": 4096,
-        "use_reflection": True  # 启用反思
-        }
+        # {
+        # "method_name": "cot_detailed_with_reflection",
+        # "prompt_type": "cot_detailed",
+        # "temperature": TEMPERATURE_COT,
+        # "max_new_tokens": 4096,
+        # "use_reflection": True  # 启用反思
+        # }
     ]
     
     # Step 3: 运行所有实验（生成答案）

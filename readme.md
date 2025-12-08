@@ -1,5 +1,5 @@
-# NLP Final Project: Math Problem Solving with Test-Time Scaling
-This project evaluates different prompt strategies for math problem solving (GSM8K/AIME) using LLMs via OpenAI-compatible API.
+# Test-Time Scaling for Math Reasoning
+Solving [MATH problems](https://huggingface.co/datasets/HuggingFaceH4/MATH-500) using LLMs(qwen8b).
 
 ## Environment Setup
 ### 1. Clone the repo
@@ -40,6 +40,12 @@ $env:OPENAI_API_BASE="https://api.siliconflow.cn/v1"
 ```
 python run_all.py
 ```
+
+### only evaluate
+```
+python run_evaluate.py
+```
+By default, the project uses `evaluate_passk` (Pass@k metric) to evaluate results — it checks if any of the k reasoning paths is correct. To get self-consistency results (majority voting on k paths), replace `evaluate_passk` with `self_consistency_passk` 
 
 ### Directory Structure
 ```

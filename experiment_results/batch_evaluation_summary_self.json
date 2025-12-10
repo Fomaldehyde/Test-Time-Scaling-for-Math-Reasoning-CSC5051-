@@ -39,7 +39,15 @@
     "prompt_tokens_total": 17574,
     "completion_tokens_total": 54680
   },
-  "raw_base_pass@5.jsonl": {
+  "raw_base_pass@5_temperature7.jsonl": {
+    "total": 50,
+    "pass@k": 0.62,
+    "latency_avg": 74.98,
+    "latency_total": 3749.0,
+    "prompt_tokens_total": 29290,
+    "completion_tokens_total": 91341
+  },
+  "raw_base_pass@5_tempreture5.jsonl": {
     "total": 50,
     "pass@k": 0.62,
     "latency_avg": 99.41,

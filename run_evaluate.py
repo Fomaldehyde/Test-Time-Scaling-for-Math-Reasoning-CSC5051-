@@ -55,7 +55,7 @@ def batch_evaluate_jsonl():
             k_match = re.search(r"pass@(\d+)", file_name)
             pass_k = int(k_match.group(1)) if k_match else NUM_SAMPLES
             
-            eval_result = evaluate_passk(
+            eval_result = self_consistency_passk(
                 jsonl_path=file_path,
                 pass_k=pass_k
             )

@@ -1,8 +1,8 @@
 import os
 import json
 from config import (
-    DATASET_SPLIT, SAMPLE_NUM, MAX_NEW_TOKENS_BASE, MAX_NEW_TOKENS_COT,
-    TEMPERATURE_BASE, TEMPERATURE_COT, NUM_SAMPLES
+    DATASET_SPLIT, SAMPLE_NUM, MAX_NEW_TOKENS_BASE, MAX_NEW_TOKENS_LONG,
+    TEMPERATURE_BASE, NUM_SAMPLES
 )
 from data.data_loader import load_math_dataset, sample_questions
 from src.prompts import get_prompt
@@ -15,50 +15,50 @@ def main():
     questions = load_math_dataset(split=DATASET_SPLIT, n=None)
     questions_to_test = sample_questions(questions, num_samples=SAMPLE_NUM)
     
-    # Step 2: 定义所有实验配置
+    # Step 2: 定义实验配置
     experiments = [
         {
             "method_name": "0_shot",
             "prompt_type": "0_shot",
-            "temperature": TEMPERATURE_BASE,
+            "do_sample": False,
             "max_new_tokens": MAX_NEW_TOKENS_BASE
         },
-        # {
-        #     "method_name": "cot_detailed",
-        #     "prompt_type": "cot_detailed",
-        #     "temperature": TEMPERATURE_COT,
-        #     "max_new_tokens": MAX_NEW_TOKENS_COT
-        # },
-        # {
-        #     "method_name": "base",
-        #     "prompt_type": "base_only_answer",
-        #     "temperature": TEMPERATURE_BASE,
-        #     "max_new_tokens": MAX_NEW_TOKENS_BASE
-        # },
+        {
+            "method_name": "cot_detailed",
+            "prompt_type": "cot_detailed",
+            "do_sample": False,
+            "max_new_tokens": MAX_NEW_TOKENS_LONG
+        },
+        {
+            "method_name": "base",
+            "prompt_type": "base_only_answer",
+            "do_sample": False,
+            "max_new_tokens": MAX_NEW_TOKENS_BASE
+        },
+        {
+            "method_name": "few_shot",
+            "prompt_type": "few_shot",
+            "do_sample": False,
+            "max_new_tokens": MAX_NEW_TOKENS_LONG
+        },
         # {
         #     "method_name": "cot_check",
         #     "prompt_type": "cot_check",
-        #     "temperature": TEMPERATURE_COT,
-        #     "max_new_tokens": MAX_NEW_TOKENS_COT
-        # },
-        # {
-        #     "method_name": "few_shot",
-        #     "prompt_type": "few_shot",
-        #     "temperature": TEMPERATURE_COT,
+        #     "temperature": TEMPERATURE_BASE,
         #     "max_new_tokens": MAX_NEW_TOKENS_COT
         # },
         # {
         #     "method_name": "mini_cot",
         #     "prompt_type": "mini_cot",
-        #     "temperature": TEMPERATURE_COT,
-        #     "max_new_tokens": MAX_NEW_TOKENS_COT
+        #     "do_sample": False,
+        #     "max_new_tokens": MAX_NEW_TOKENS_LONG
         # },
         # {
-        # "method_name": "cot_detailed_with_reflection",
-        # "prompt_type": "cot_detailed",
-        # "temperature": TEMPERATURE_COT,
+        # "method_name": "base_with_reflection",
+        # "prompt_type": "base_only_answer",
+        # "temperature": TEMPERATURE_BASE,
         # "max_new_tokens": 4096,
-        # "use_reflection": True  # 启用反思
+        # "use_reflection": True  
         # }
     ]
     
@@ -72,7 +72,8 @@ def main():
             method_name=exp["method_name"],
             prompt=prompt,
             num_samples=NUM_SAMPLES,
-            temperature=exp["temperature"],
+            do_sample=exp.get("do_sample", False),
+            temperature=exp.get("temperature", 0.7),
             max_new_tokens=exp["max_new_tokens"]
         )
         result_files.append((exp["method_name"], out_file))

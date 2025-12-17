@@ -61,14 +61,15 @@ def resume_jsonl(func):
     """通用续跑装饰器：自动跳过已处理行，无需硬编码路径"""
     @functools.wraps(func)
     def wrapper(input_path, output_path, *args, **kwargs):
-        # 1. 统计已写行数
+        # 1. 统计已写行数（仅统计非空行）
         written = 0
         if os.path.exists(output_path):
             with open(output_path, encoding="utf-8") as f:
-                written = sum(1 for _ in f)
-        # 2. 统计输入总行数
+                written = sum(1 for _ in f if _.strip())
+        # 2. 统计输入总行数（仅统计非空行）
+        total_in = 0
         with open(input_path, encoding="utf-8") as f:
-            total_in = sum(1 for _ in f)
+            total_in = sum(1 for _ in f if _.strip())
         # 3. 已完成则跳过
         if written >= total_in:
             print(f"[DONE] {output_path} 已完整（{written}/{total_in}），跳过")
@@ -92,64 +93,92 @@ def _reflect_call(question, original_output, temperature=0.3, max_new=512):
     )
     return ans, pt, ct
 
-# -------------------- 5. 断点续跑 --------------------
-@resume_jsonl  # 不再硬编码路径，通用装饰器
-def refine_generic(  # 改名：通用反射修正
+# -------------------- 5. 通用反射修正（仅保留反思结果到model_output） --------------------
+@resume_jsonl
+def refine_generic(
     input_path: str, 
     output_path: str, 
     skip_lines: int, 
     temperature: float = 0.3, 
     max_new_tokens: int = 512,
-    sample_idx: int = 0  # 新增：指定处理第几个样本（适配pass@k）
+    sample_idx: int = 0  # 指定处理第几个样本（适配pass@k）
 ):
-    """通用反射修正函数（支持任意生成的jsonl续跑）"""
+    """通用反射修正函数：反射后仅将反思结果存入model_output字段"""
     with open(input_path, encoding="utf-8") as fin, \
          open(output_path, "a", encoding="utf-8") as fout:
         
-        # 跳过已处理行（续跑核心逻辑，通用）
-        for _ in range(skip_lines):
-            next(fin)
+        # 跳过已处理行（仅跳过非空行）
+        skipped = 0
+        while skipped < skip_lines:
+            line = fin.readline()
+            if not line:
+                break
+            if line.strip():
+                skipped += 1
         
-        # 进度条适配（通用）
-        remaining_lines = sum(1 for _ in fin)
-        fin.seek(0)
-        for _ in range(skip_lines):
-            next(fin)
+        # 统计剩余行数（用于进度条）
+        remaining_lines = sum(1 for _ in fin if _.strip())
+        fin.seek(0)  # 重置文件指针
+        # 重新跳过已处理行
+        skipped = 0
+        while skipped < skip_lines:
+            line = fin.readline()
+            if not line:
+                break
+            if line.strip():
+                skipped += 1
         
-        # 通用业务逻辑（适配任意jsonl）
-        for line in tqdm(fin, desc="Refining (Generic)", initial=skip_lines, total=skip_lines+remaining_lines):
-            rec = json.loads(line.strip())
-            # 通用：取指定样本（适配pass@k）
+        # 处理剩余行
+        pbar = tqdm(
+            iter(fin.readline, ""),
+            desc="Refining (Generic)",
+            initial=skip_lines,
+            total=skip_lines + remaining_lines
+        )
+        for line in pbar:
+            line = line.strip()
+            if not line:
+                continue
+            
+            rec = json.loads(line)
+            # 校验样本索引是否越界
+            if sample_idx >= len(rec["model_outputs"]):
+                print(f"⚠️ 样本索引{sample_idx}越界，跳过question_id={rec.get('question_id', '未知')}")
+                continue
+            
+            # 读取原始model_output（无需兼容其他字段）
             sample = rec["model_outputs"][sample_idx]
-            # 通用：兼容round1/round2/model_raw_output字段
-            ans1 = sample.get("round1") or sample.get("model_raw_output", "")
-            pt1 = sample.get("prompt_tokens", 0)
+            original_ans = sample.get("model_output", "")  # 仅读取原始model_output
+            pt1 = sample.get("prompt_tokens", 0)          # 原始生成的token数
             ct1 = sample.get("completion_tokens", 0)
-            lat1 = sample.get("latency", 0.0)
+            lat1 = sample.get("latency", 0.0)              # 原始生成的耗时
 
-            # 反射修正（通用逻辑不变）
+            # 执行反射修正
             t0 = time.time()
-            ans2, pt2, ct2 = _reflect_call(rec["question"], ans1, temperature, max_new_tokens)
-            lat2 = time.time() - t0
+            reflect_ans, pt2, ct2 = _reflect_call(
+                rec["question"], original_ans, temperature, max_new_tokens
+            )
+            lat2 = time.time() - t0  # 反思阶段耗时
 
-            # 通用：更新样本结构（兼容任意method_name）
+            #仅保留反思结果到model_output（覆盖原始值）
             sample.update({
-                "round1": ans1,
-                "round2": ans2,
-                "prompt_tokens": pt1 + pt2,
+                "model_output": reflect_ans,  # 只存反思后的答案
+                "prompt_tokens": pt1 + pt2,   # 累计原始+反思的token数
                 "completion_tokens": ct1 + ct2,
-                "latency": round(lat1 + lat2, 3)
+                "latency": round(lat1 + lat2, 3)  # 累计原始+反思的耗时
             })
             rec["model_outputs"][sample_idx] = sample
-            # 通用：更新全局统计
+
+            # 更新全局统计
             rec["total_prompt_tokens"] = rec.get("total_prompt_tokens", 0) + pt2
             rec["total_completion_tokens"] = rec.get("total_completion_tokens", 0) + ct2
             rec["total_latency"] = rec.get("total_latency", 0.0) + round(lat2, 3)
-            # 通用：给方法名加后缀（可选）
+
+            # 给方法名加后缀（标记已反射）
             if "config" in rec and "method_name" in rec["config"]:
                 if not rec["config"]["method_name"].endswith("_refine"):
                     rec["config"]["method_name"] += "_refine"
 
-            # 续跑核心：实时写入+flush（通用）
+            # 实时写入修正后的结果
             fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fout.flush()

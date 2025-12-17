@@ -4,7 +4,7 @@ from config import NUM_SAMPLES
 from src.grade import grade_answer, extract_answer
 
 def evaluate_passk(jsonl_path, pass_k=NUM_SAMPLES):
-    """兼容 refine 格式：优先 round2，否则回退 model_raw_output"""
+    """兼容 refine 格式：优先 round2，否则回退 model_output"""
     total, pass_ok = 0, 0
     all_lat, all_pt, all_ct = [], [], []
 
@@ -16,7 +16,7 @@ def evaluate_passk(jsonl_path, pass_k=NUM_SAMPLES):
 
             # 投票：优先用 round2，没有就回退旧字段
             if any(grade_answer(extract_answer(
-                    o.get("round2") or o["model_raw_output"]), ref)
+                    o.get("round2") or o["model_output"]), ref)
                     for o in rec["model_outputs"][:pass_k]):
                 pass_ok += 1
 
@@ -56,7 +56,7 @@ def self_consistency_passk(jsonl_path, pass_k=NUM_SAMPLES):
             # 1. 提取每条路径的答案（优先round2，和原逻辑一致）
             path_answers = []
             for o in outputs:
-                raw_ans = o.get("round2") or o["model_raw_output"]  # 兼容round1/round2
+                raw_ans = o.get("round2") or o["model_output"]  # 兼容model_output/round2
                 norm_ans = extract_answer(raw_ans)
                 path_answers.append(norm_ans)
             

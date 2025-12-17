@@ -8,7 +8,6 @@ from config import SAVE_DIR, NUM_SAMPLES
 def generate_and_save_answers(
     questions_to_test,
     method_name="default",
-    prompt_type="base_empty",
     prompt="",
     num_samples=NUM_SAMPLES,
     do_sample=True,
@@ -27,16 +26,17 @@ def generate_and_save_answers(
                 if line.strip():
                     rec = json.loads(line)
                     generated_ids.add(rec["question_id"])
-        print(f"[续跑] {out_file} 已生成 {len(generated_ids)} 题，跳过这些题继续...")
+        if len(generated_ids) > 0:
+            print(f"[续跑] {out_file} 已生成 {len(generated_ids)} 题，跳过这些题继续...")
 
     with open(out_file, "a", encoding="utf-8") as f_out:
-        pbar = tqdm(enumerate(questions_to_test, 1),
-                    total=len(questions_to_test),
+        pbar = tqdm(total=len(questions_to_test),
                     initial=len(generated_ids),
                     desc=f"Generating {method_name}")
         
-        for idx, item in pbar:
+        for idx, item in enumerate(questions_to_test, 1):
             if idx in generated_ids:
+                pbar.update(1)
                 continue
             
             question = item["question"]
@@ -71,8 +71,7 @@ def generate_and_save_answers(
 
                 samples.append({
                     "sample_idx": s + 1,
-                    "round1": ans1,
-                    "round2": ans2,
+                    "model_output": ans2,
                     "prompt_tokens": pt1 + pt2,
                     "completion_tokens": ct1 + ct2,
                     "latency": round(latency, 3)
@@ -95,5 +94,6 @@ def generate_and_save_answers(
             }
             f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
             f_out.flush()
-    print(f"\nRaw answers saved to → {out_file}")
+            pbar.update(1)
+    pbar.close()
     return out_file

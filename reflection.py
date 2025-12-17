@@ -51,7 +51,7 @@ def add_refine_to_jsonl_local(input_path, output_path):
         for line in tqdm(fin, desc="Local refining", initial=written, total=total_in):
             rec = json.loads(line)
             r1 = rec["model_outputs"][0]
-            ans1 = r1["model_raw_output"]
+            ans1 = r1["model_output"]
             pt1, ct1, lat1 = r1["prompt_tokens"], r1["completion_tokens"], r1["latency"]
 
             t0 = time.time()
@@ -61,8 +61,7 @@ def add_refine_to_jsonl_local(input_path, output_path):
             # 更新总计
             rec["model_outputs"] = [{
                 "sample_idx": 1,
-                "round1": ans1,
-                "round2": ans2,
+                "model_output": ans2,
                 "prompt_tokens": pt1 + pt2,
                 "completion_tokens": ct1 + ct2,
                 "latency": round(lat1 + lat2, 3)
@@ -78,6 +77,6 @@ def add_refine_to_jsonl_local(input_path, output_path):
 
 
 if __name__ == "__main__":
-    in_file = "./experiment_results/raw_base_empty_prompt_pass@1.jsonl"
-    out_file = "./experiment_results/raw_base_empty_refine.jsonl"
+    in_file = "./experiment_results/raw_cot_detailed_reflection2.jsonl"
+    out_file = "./experiment_results/raw_cot_detailed_reflection3.jsonl"
     add_refine_to_jsonl_local(in_file, out_file)

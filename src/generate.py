@@ -3,7 +3,7 @@ import json
 import time
 from tqdm import tqdm
 from src.model_api import generate_answer_api, reflect_and_correct
-from config import SAVE_DIR, NUM_SAMPLES
+from config import SAVE_DIR, NUM_SAMPLES, RANDOM_SEED
 
 def generate_and_save_answers(
     questions_to_test,
@@ -16,7 +16,7 @@ def generate_and_save_answers(
     use_reflection=False
 ):
     os.makedirs(SAVE_DIR, exist_ok=True)
-    out_file = f"{SAVE_DIR}/raw_{method_name}_pass@{num_samples}.jsonl"
+    out_file = f"{SAVE_DIR}/raw_{method_name}_pass@{num_samples}_seed{RANDOM_SEED}.jsonl"
 
     # 断点续跑
     generated_ids = set()

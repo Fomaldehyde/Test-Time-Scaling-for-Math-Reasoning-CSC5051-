@@ -20,30 +20,30 @@ def main():
     
     # Step 2: 定义实验配置
     experiments = [
-        {
-            "method_name": "base",
-            "prompt_type": "base_only_answer",
-            "num_samples": RUN_NUM_SAMPLES,
-            "max_new_tokens": MAX_NEW_TOKENS_BASE
-        },
-        {
-            "method_name": "base",
-            "prompt_type": "base_only_answer",
-            "num_samples": 3,
-            "max_new_tokens": MAX_NEW_TOKENS_BASE
-        },
+        # {
+        #     "method_name": "base",
+        #     "prompt_type": "base_only_answer",
+        #     "num_samples": RUN_NUM_SAMPLES,
+        #     "max_new_tokens": MAX_NEW_TOKENS_BASE
+        # },
+        # {
+        #     "method_name": "base",
+        #     "prompt_type": "base_only_answer",
+        #     "num_samples": 3,
+        #     "max_new_tokens": MAX_NEW_TOKENS_BASE
+        # },
         # {
         #     "method_name": "0_shot",
         #     "prompt_type": "0_shot",
         #     "num_samples": RUN_NUM_SAMPLES,
         #     "max_new_tokens": MAX_NEW_TOKENS_BASE
         # },
-        # {
-        #     "method_name": "cot_detailed",
-        #     "prompt_type": "cot_detailed",
-        #     "num_samples": RUN_NUM_SAMPLES,
-        #     "max_new_tokens": MAX_NEW_TOKENS_LONG
-        # },
+        {
+            "method_name": "cot_detailed",
+            "prompt_type": "cot_detailed",
+            "num_samples": 3,
+            "max_new_tokens": MAX_NEW_TOKENS_LONG
+        },
         # {
         #     "method_name": "few_shot",
         #     "prompt_type": "few_shot",
@@ -91,19 +91,19 @@ def main():
         )
         result_files.append((exp["method_name"], out_file, exp_num_samples))
     
-    # Step 4: 评估所有实验结果（Pass@k）
-    # Step 4: Evaluate all experimental results (Pass@k + Latency + Token)
+    # Step 4: 评估所有实验结果（Self-Consistency）
     print("\n" + "="*50 + " Evaluate Results " + "="*50)
     all_reports = {}
     for method_name, jsonl_path, exp_num_samples in result_files:
-        report = evaluate_passk(jsonl_path, pass_k=exp_num_samples)
+        # 使用自洽性评估（主要方法）
+        report = self_consistency_passk(jsonl_path, pass_k=exp_num_samples)
         all_reports[method_name] = report
         
         # Print core metrics (English only, no emoji)
         print(f"\n=== {method_name} ===")
-        print(f"Core Pass Rate:")
+        print(f"Self-Consistency Accuracy:")
         print(f"   - Total questions: {report['total']}")
-        print(f"   - Pass@{exp_num_samples}: {report['pass@k']:.4f} ({report['pass@k']*100:.2f}%)")
+        print(f"   - Accuracy (k={exp_num_samples}): {report['pass@k']:.4f} ({report['pass@k']*100:.2f}%)")
         
         print(f"\nLatency Statistics (Unit: seconds):")
         print(f"   - Average latency per question: {report['latency_avg']:.2f}")

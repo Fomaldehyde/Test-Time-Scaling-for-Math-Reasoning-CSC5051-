@@ -310,15 +310,68 @@ def extract_answer(text: str) -> str:
     if text is None:
         return ""
     text = str(text).strip()
-    # 抽取\boxed{}中的答案
-    boxed = re.findall(r'\\boxed\s*\{((?:[^{}]|(?:\{[^{}]*\}))*)\}', text, re.S)
-    if boxed:
-        raw = boxed[-1].strip()
-    else:
+    
+    # 使用花括号计数法抽取 \boxed{...} 中的内容
+    def extract_boxed_content(text):
+        """Extract all content from \boxed{...} handling arbitrary nesting"""
+        results = []
+        i = 0
+        while i < len(text):
+            # Find \boxed{
+            match = re.search(r'\\boxed\s*\{', text[i:])
+            if not match:
+                break
+            start = i + match.end()  # Position after \boxed{
+            
+            # Count braces to find matching closing brace
+            brace_count = 1
+            j = start
+            while j < len(text) and brace_count > 0:
+                if text[j] == '{':
+                    brace_count += 1
+                elif text[j] == '}':
+                    brace_count -= 1
+                j += 1
+            
+            if brace_count == 0:  # Found matching closing brace
+                results.append(text[start:j-1])
+                i = j
+            else:
+                i = start
+        return results
+    
+    boxed = extract_boxed_content(text)
+    
+    # 从后往前找第一个非空且不只是 $$ 的
+    raw = ""
+    for b in reversed(boxed):
+        content = b.strip()
+        # 跳过空内容或只有 $$ 的
+        if content and content not in ['$$', '$', '']:
+            raw = content
+            break
+    
+    if not raw:
+        # 若找不到有效 boxed，尝试在成对 $$ 之间取最后一段
+        dollar_blocks = re.findall(r'\$\$([\s\S]*?)\$\$', text)
+        for db in reversed(dollar_blocks):
+            content = db.strip()
+            if content and not content.startswith('\\boxed'):
+                raw = content
+                break
+    
+    if not raw:
         # 兜底：Answer: / 最后一行
         m = re.search(r'(?:Answer|答案)[:：]\s*(.+?)(?:\n|$)', text, re.I)
         raw = m.group(1).strip() if m else text.splitlines()[-1].strip()
-    # 归一化
+    
+    # 归一化前清理单位
     raw = raw.strip().rstrip('.。,，')
+    # 移除 \text{...} 以及其后可能的 } （包括未闭合的情况）
+    raw = re.sub(r'\\text\s*\{[^}]*\}?', '', raw)
+    # 清理多余的 ^{} 或单独的 ^ 或未闭合的 ^{
+    raw = re.sub(r'\^\s*\{\s*\}?', '', raw)
+    raw = re.sub(r'\^(?!\{)', '', raw)
+    raw = raw.strip()
     normalized = normalize_answer(raw)
     return normalized if normalized else raw

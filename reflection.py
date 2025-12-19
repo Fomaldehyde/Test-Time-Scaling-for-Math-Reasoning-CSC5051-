@@ -3,16 +3,16 @@ from tqdm import tqdm
 from src.model_api import generate_answer_api
 from retrying import retry
 from config import SAVE_DIR
+from src.prompts import get_prompt
 
 
 @retry(stop_max_attempt_number=3, wait_fixed=1000)
 def reflect_and_correct(question, original_output):
-    check_prompt = (
-        "Below is a student's solution. Check every arithmetic step. "
-        "If you find any error, write the corrected final answer. "
-        "Otherwise repeat the original answer.\n\n"
-        f"Solution:\n{original_output}\n\n"
-        "Corrected final answer within \\boxed{}:"
+    # Use unified reflection prompt from prompts.py for consistency
+    check_prompt_template = get_prompt("reflection")
+    check_prompt = check_prompt_template.format(
+        question=question,
+        original_answer=original_output,
     )
     second, pt, ct, _ = generate_answer_api(
         question=question,
@@ -77,6 +77,6 @@ def add_refine_to_jsonl_local(input_path, output_path):
 
 
 if __name__ == "__main__":
-    in_file = "./experiment_results/raw_cot_detailed_reflection2.jsonl"
-    out_file = "./experiment_results/raw_cot_detailed_reflection3.jsonl"
+    in_file = "./experiment_results/raw_few_shot_pass@1_seed42.jsonl"
+    out_file = "./experiment_results/raw_few_shot_pass@1_seed42_reflection.jsonl"
     add_refine_to_jsonl_local(in_file, out_file)

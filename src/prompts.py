@@ -1,6 +1,6 @@
 # 所有Prompt模板（统一维护，便于修改）
 PROMPTS = {
-    "0_shot": "",
+    "0_shot": "Put the answer in \\boxed{}",
     "base_only_answer": "Give ONLY the final answer WITHOUT explanation, put the answer in \\boxed{}",
     "cot_detailed": "Solve the problem step by step and put the final answer within \\boxed{}.\n",
     "cot_check": "Solve step by step, then double-check your arithmetic then put the corrected final answer in \\boxed{}." ,

@@ -28,16 +28,19 @@ def generate_and_save_answers(
                     generated_ids.add(rec["question_id"])
         if len(generated_ids) > 0:
             print(f"[续跑] {out_file} 已生成 {len(generated_ids)} 题，跳过这些题继续...")
+            print(f"[续跑] 已生成题目 ID: {sorted(list(generated_ids))[:10]}{'...' if len(generated_ids) > 10 else ''}")
 
     with open(out_file, "a", encoding="utf-8") as f_out:
+        # 构建待处理题目列表（只包含未生成的题目）
+        remaining_questions = [(idx, item) for idx, item in enumerate(questions_to_test, 1) 
+                               if idx not in generated_ids]
+        
+        # 创建进度条：显示已生成 + 待处理
         pbar = tqdm(total=len(questions_to_test),
                     initial=len(generated_ids),
                     desc=f"Generating {method_name}")
         
-        for idx, item in enumerate(questions_to_test, 1):
-            if idx in generated_ids:
-                pbar.update(1)
-                continue
+        for idx, item in remaining_questions:
             
             question = item["question"]
             ref_ans = item["answer"]

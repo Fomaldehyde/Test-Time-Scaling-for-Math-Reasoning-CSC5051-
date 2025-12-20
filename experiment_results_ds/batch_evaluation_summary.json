@@ -1,0 +1,66 @@
+{
+  "raw_base_pass@1_seed42.jsonl": {
+    "total": 10,
+    "pass@k": 0.3,
+    "latency_avg": 109.33,
+    "latency_total": 1093.33,
+    "prompt_tokens_total": 1567,
+    "completion_tokens_total": 24185
+  },
+  "raw_base_pass@1_seed42_reflection.jsonl": {
+    "total": 10,
+    "pass@k": 0.6,
+    "latency_avg": 331.67,
+    "latency_total": 3316.75,
+    "prompt_tokens_total": 29589,
+    "completion_tokens_total": 55210
+  },
+  "raw_base_pass@1_seed42_reflection1.jsonl": {
+    "total": 10,
+    "pass@k": 0.5,
+    "latency_avg": 236.87,
+    "latency_total": 2368.69,
+    "prompt_tokens_total": 29589,
+    "completion_tokens_total": 47538
+  },
+  "raw_base_pass@3_seed42.jsonl": {
+    "total": 10,
+    "pass@k": 0.6,
+    "latency_avg": 300.7,
+    "latency_total": 3006.96,
+    "prompt_tokens_total": 4701,
+    "completion_tokens_total": 78388
+  },
+  "raw_cot_detailed_pass@1_seed42.jsonl": {
+    "total": 10,
+    "pass@k": 0.6,
+    "latency_avg": 115.46,
+    "latency_total": 1154.57,
+    "prompt_tokens_total": 1577,
+    "completion_tokens_total": 26229
+  },
+  "raw_few_shot_pass@1_seed42.jsonl": {
+    "total": 10,
+    "pass@k": 0.7,
+    "latency_avg": 110.61,
+    "latency_total": 1106.09,
+    "prompt_tokens_total": 2143,
+    "completion_tokens_total": 24431
+  },
+  "raw_few_shot_pass@1_seed42_reflection1.jsonl": {
+    "total": 10,
+    "pass@k": 0.7,
+    "latency_avg": 191.54,
+    "latency_total": 1915.42,
+    "prompt_tokens_total": 30414,
+    "completion_tokens_total": 42933
+  },
+  "raw_few_shot_pass@3_seed42.jsonl": {
+    "total": 10,
+    "pass@k": 0.7,
+    "latency_avg": 387.45,
+    "latency_total": 3874.53,
+    "prompt_tokens_total": 6429,
+    "completion_tokens_total": 83653
+  }
+}
